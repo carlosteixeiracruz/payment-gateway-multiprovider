@@ -8,6 +8,7 @@ use App\Services\Payments\PaymentProcessor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Models\Transaction;
+use App\Http\Requests\PurchaseRequest;
 
 class PaymentController extends Controller
 {
@@ -34,33 +35,27 @@ class PaymentController extends Controller
     /**
      * Cria uma tentativa de pagamento.
      */
-    public function purchase(Request $request)
+    public function purchase(PurchaseRequest $request) // <-- Trocamos Request por PurchaseRequest
     {
-        $request->validate([
-            'provider' => 'required|string',
-            'amount'   => 'required|numeric|min:0.01',
-            'currency' => 'string|max:3',
-        ]);
-
+        // Se o código chegar aqui, significa que os dados já foram validados!
         try {
             $result = $this->paymentProcessor->execute(
                 $request->input('provider'),
                 $request->all()
             );
 
-            // SALVANDO NO BANCO DE DADOS
-            $transaction = Transaction::create([
+            $transaction = \App\Models\Transaction::create([
                 'user_id'     => auth()->id(),
-                'amount'      => $result['amount'],
-                'currency'    => $result['currency'] ?? 'BRL',
-                'provider'    => $result['provider'],
-                'provider_id' => $result['transaction_id'], // Verifique se na migration está provider_id ou provider_transaction_id
+                'amount'      => $request->amount,
+                'currency'    => $request->currency,
+                'provider'    => $request->provider,
+                'provider_id' => $result['transaction_id'],
                 'status'      => $result['status'] ?? 'pending',
             ]);
 
             return response()->json([
-                'message' => 'Transação iniciada',
-                'data' => $transaction
+                'message' => 'Pagamento iniciado com sucesso',
+                'data'    => $transaction
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
