@@ -1,79 +1,84 @@
-🎁 GiftFlow - API de Resgate de Gift Cards
+Payment Gateway Multiprovider
 
-Este projeto é um desafio técnico para uma API de resgate de Gift Cards, focada em performance, uso de filas para Webhooks, segurança com assinaturas digitais e arquitetura baseada em eventos.
-🛠️ Decisões Técnicas & Diferenciais
+Este projeto é uma API de integração de pagamentos desenvolvida em Laravel 11. O sistema utiliza o padrão de projeto Adapter para permitir a integração com múltiplos provedores de pagamento (como Stripe e PayPal) de forma flexível e escalável.
+Descrição do Projeto
 
-    Segurança HMAC SHA256: Implementação de assinatura digital no Header (X-GiftFlow-Signature) para garantir a integridade e autenticidade dos Webhooks enviados.
+A aplicação gerencia o fluxo completo de uma transação financeira, desde a autenticação do usuário e a criação da intenção de compra até o processamento de confirmações automáticas via Webhooks.
+O que foi implementado:
 
-    Idempotência de Resgate: Garantia de que um mesmo código não seja processado mais de uma vez para o mesmo usuário, evitando gastos duplicados.
+    Arquitetura de Pagamentos: Implementação de um Service Provider e um PaymentProcessor que isola a lógica de cada operadora de pagamento.
 
-    Queueing (Filas): Webhooks processados em background (driver database) para resposta instantânea ao usuário.
+    Autenticação via API: Uso do Laravel Sanctum para proteção de rotas, garantindo que apenas usuários autenticados possam realizar compras e consultar históricos.
 
-    Persistência em JSON: Simulação de integração com sistemas legados através de parsing e escrita em arquivos JSON estruturados.
+    Segurança e Validação: * Criação de FormRequests para validar dados de entrada (bloqueando valores negativos ou provedores não suportados).
 
-    Dockerizado (Sail): Ambiente isolado e reprodutível via containers.
+        Tratamento global de exceções para ocultar erros técnicos do banco de dados e exibir mensagens amigáveis (JSON) ao cliente.
 
-🚀 Como Instalar e Rodar
+    Sistema de Webhooks: Rota pública preparada para receber notificações assíncronas dos provedores, atualizando o status das transações em tempo real.
 
-    Subir os Containers:
-    Bash
+    Idempotência: Controle via cache para evitar o processamento duplicado de notificações de pagamento (Webhooks) enviadas pelo mesmo evento.
 
-./vendor/bin/sail up -d
+Tecnologias Utilizadas
 
-Configurar o Ambiente:
-Bash
+    Linguagem: PHP 8.2+
 
-./vendor/bin/sail composer install
-./vendor/bin/sail artisan key:generate
-./vendor/bin/sail artisan migrate
+    Framework: Laravel 11
 
-Permissões Críticas (Docker Desktop):
-Bash
+    Banco de Dados: MySQL
 
-docker exec -u root -it giftflow-laravel.test-1 chmod -R 777 storage database
+    Ambiente: Docker (Laravel Sail)
 
-Popular Dados (Seed):
-Bash
+    Autenticação: Laravel Sanctum
 
-    ./vendor/bin/sail artisan giftflow:seed
+Requisitos para Instalação
 
-📡 Testando a API
-1. Resgate de Gift Card
+Para rodar o projeto localmente, você precisará do Docker instalado.
 
-    Endpoint: POST http://localhost:8888/api/redeem
+    Clone o repositório: git clone https://github.com/carlosteixeiracruz/payment-gateway-multiprovider.git
 
-    Body JSON:
+    Acesse a pasta do projeto: cd payment-gateway-multiprovider
 
-JSON
+    Suba o ambiente Docker: ./vendor/bin/sail up -d
 
-{
-    "code": "GFLOW-TEST-0001",
-    "user": {
-        "email": "antonio@favedev.com"
-    }
-}
+    Instale as dependências do Composer: ./vendor/bin/sail composer install
 
-2. Validação do Webhook (Simulação de Emissor)
+    Gere a chave da aplicação e rode as migrations: ./vendor/bin/sail php artisan key:generate ./vendor/bin/sail php artisan migrate
 
-O sistema possui um Mock Endpoint integrado que valida a assinatura dos Webhooks recebidos.
+Documentação da API
+Rotas de Autenticação
 
-    Rota de Escuta: /api/webhook/issuer-platform
+    POST /api/register: Cria um novo usuário (campos: name, email, password, password_confirmation).
 
-    Validação: O endpoint verifica se o HMAC enviado no header confere com a GIFTFLOW_WEBHOOK_SECRET.
+    POST /api/login: Autentica o usuário e retorna o Token Bearer.
 
-Para processar a fila e ver a validação acontecendo no log:
-Bash
+Rotas de Pagamento (Requerem Token)
 
-# Terminal 1: Rodar o Worker
-./vendor/bin/sail artisan queue:work
+    POST /api/purchase: Inicia um processo de pagamento.
 
-# Terminal 2: Ver o Log de Sucesso
-tail -f storage/logs/laravel.log
+        Campos: provider (stripe ou paypal), amount (numérico, min 1), currency (ex: BRL).
 
-📂 Estrutura de Arquivos
+    GET /api/transactions: Retorna a lista de todas as transações do usuário logado.
 
-    storage/app/giftcards.json: Banco de dados de códigos disponíveis.
+Rotas de Integração (Públicas)
 
-    storage/app/redemptions.json: Histórico de resgates para controle de idempotência.
+    POST /api/webhook/{provider}: Recebe o status da transação vindo do provedor externo.
 
-Desenvolvido por Antonio (FaveDev)
+        Campos: event_id, transaction_id, status.
+
+Estrutura do Banco de Dados
+
+A tabela principal 'transactions' contém os seguintes campos:
+
+    user_id: Relacionamento com o usuário.
+
+    amount: Valor da transação.
+
+    currency: Moeda utilizada.
+
+    provider: Nome do provedor (Stripe/PayPal).
+
+    provider_id: ID de referência gerado pelo provedor externo.
+
+    status: Estado atual (pending, paid, success, failed).
+
+Desenvolvido por Carlos Teixeira Cruz.
